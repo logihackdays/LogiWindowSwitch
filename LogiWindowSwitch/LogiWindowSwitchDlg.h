@@ -30,4 +30,11 @@ protected:
 	afx_msg void OnPaint();
 	afx_msg HCURSOR OnQueryDragIcon();
 	DECLARE_MESSAGE_MAP()
+	BOOL SetRawInput(HWND hWnd);
+	VOID RawInput(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+	VOID HandleKeyInput(RAWKEYBOARD rawKB);
+	BOOL PreTranslateMessage(MSG* pMsg);
+public:
+	CEdit m_Edit1;
+	afx_msg void OnEnChangeEdit1();
 };

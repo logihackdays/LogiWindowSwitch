@@ -6,6 +6,7 @@
 #include "LogiWindowSwitch.h"
 #include "LogiWindowSwitchDlg.h"
 #include "afxdialogex.h"
+#include "LogitechGkeyLib.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -25,6 +26,7 @@ CLogiWindowSwitchDlg::CLogiWindowSwitchDlg(CWnd* pParent /*=NULL*/)
 void CLogiWindowSwitchDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
+	DDX_Control(pDX, IDC_EDIT1, m_Edit1);
 }
 
 BEGIN_MESSAGE_MAP(CLogiWindowSwitchDlg, CDialogEx)
@@ -45,7 +47,10 @@ BOOL CLogiWindowSwitchDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// 設定小圖示
 
 	// TODO: 在此加入額外的初始設定
-
+	if (!SetRawInput(m_hWnd)) {
+		AfxMessageBox(L"Fail to Rigister Raw Input");
+		exit(0);
+	}
 	return TRUE;  // 傳回 TRUE，除非您對控制項設定焦點
 }
 
@@ -85,3 +90,83 @@ HCURSOR CLogiWindowSwitchDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
+VOID CLogiWindowSwitchDlg::HandleKeyInput(RAWKEYBOARD rawKB) {
+	auto vkCode = rawKB.VKey;
+	auto scanCode = rawKB.MakeCode;
+	auto flags = rawKB.Flags;
+	auto message = rawKB.Message;
+	CString ss;
+	m_Edit1.GetWindowTextW(ss);
+	ss.Format(L"%sdown vkcode : %d, scancode : %d, flags : %d\r\n", ss, vkCode, scanCode, flags);
+	m_Edit1.SetWindowTextW(ss);
+	m_Edit1.SetSel(0xFFFF, 0xFFFF);
+	static CWnd *target[4];
+	static clock_t timer[4];
+	static bool start[4];
+
+	int id = scanCode - 100;
+	if (id < 0 || id >= 4)
+		return;
+
+	if (flags == 0) {
+		if (start[id] == false) {
+			start[id] = true;
+			timer[id] = clock();
+		}
+		return;
+	}
+	start[id] = false;
+	bool mode = (float(clock() - timer[id]) / CLOCKS_PER_SEC) >= 2;
+	if (mode) {
+		target[id] = GetForegroundWindow();
+	}
+	else {
+		if (target[id] == NULL || !IsWindow(target[id]->m_hWnd)) {
+			target[id] = NULL;
+		}
+		else {
+			if (target[id]->IsIconic()) {
+				target[id]->ShowWindow(SW_RESTORE);
+			}
+			while (GetForegroundWindow() != target[id]) {
+				target[id]->SetActiveWindow();
+				target[id]->SetForegroundWindow();
+				target[id]->SetFocus();
+			}
+		}
+	}
+}
+
+BOOL CLogiWindowSwitchDlg::SetRawInput(HWND hWnd) {
+	RAWINPUTDEVICE Rid;
+	Rid.usUsagePage = 0x01;
+	Rid.usUsage = 0x06;
+	Rid.dwFlags = RIDEV_NOLEGACY | RIDEV_INPUTSINK;
+	Rid.hwndTarget = hWnd;
+	return RegisterRawInputDevices(&Rid, 1, sizeof(Rid));
+}
+
+VOID CLogiWindowSwitchDlg::RawInput(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+	UINT dwSize;
+
+	GetRawInputData((HRAWINPUT)lParam, RID_INPUT, NULL, &dwSize, sizeof(RAWINPUTHEADER));
+	LPBYTE lpb = new BYTE[dwSize];
+	if (lpb == NULL) {
+		return;
+	}
+
+	if (GetRawInputData((HRAWINPUT)lParam, RID_INPUT, lpb, &dwSize,
+		sizeof(RAWINPUTHEADER)) != dwSize)
+		OutputDebugString(TEXT("GetRawInputData does not return correct size !\n"));
+
+	RAWINPUT* raw = (RAWINPUT*)lpb;
+	HandleKeyInput(raw->data.keyboard);
+	delete[] lpb;
+}
+
+BOOL CLogiWindowSwitchDlg::PreTranslateMessage(MSG* pMsg)
+{
+	if (pMsg->message == WM_INPUT)
+		RawInput(pMsg->hwnd, pMsg->message, pMsg->wParam, pMsg->lParam);
+	return CDialog::PreTranslateMessage(pMsg);
+}
