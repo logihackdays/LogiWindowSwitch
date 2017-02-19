@@ -49,5 +49,5 @@ protected:
 public:
 	CEdit m_Edit1;
 	CListBox m_KeyList;
-	CListBox m_WindowsList;
+	CEdit m_WindowsEdit;
 };

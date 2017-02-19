@@ -28,7 +28,7 @@ void CLogiWindowSwitchDlg::DoDataExchange(CDataExchange* pDX)
 	CDialogEx::DoDataExchange(pDX);
 	DDX_Control(pDX, IDC_EDIT1, m_Edit1);
 	DDX_Control(pDX, IDC_KEYLIST, m_KeyList);
-	DDX_Control(pDX, IDC_WINDOWSLIST, m_WindowsList);
+	DDX_Control(pDX, IDC_WINDOWSEDIT, m_WindowsEdit);
 }
 
 BEGIN_MESSAGE_MAP(CLogiWindowSwitchDlg, CDialogEx)
@@ -143,7 +143,11 @@ VOID CLogiWindowSwitchDlg::HandleKeyInput(RAWKEYBOARD rawKB) {
 	else {
 		if (down) {
 			if (group.counter == 0) {
-				for (auto w : windows) {
+				for (int i = windows.size() - 1; i >= 0; i--) {
+					auto w = windows[i];
+					if (!IsWindow(w->m_hWnd)) {
+						continue;
+					}
 					if (w->IsIconic()) {
 						auto fg = GetForegroundWindow();
 						w->ShowWindow(SW_RESTORE);
@@ -164,7 +168,11 @@ VOID CLogiWindowSwitchDlg::HandleKeyInput(RAWKEYBOARD rawKB) {
 			}
 		}
 		else {
-			for (auto w : windows) {
+			for (int i = windows.size() - 1; i >= 0; i--) {
+				auto w = windows[i];
+				if (!IsWindow(w->m_hWnd)) {
+					continue;
+				}
 				w->SetWindowPos(&wndNoTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 				if (group.counter == 1) {
 					while (GetForegroundWindow() != w) {
@@ -229,12 +237,18 @@ void CLogiWindowSwitchDlg::OnTimer(UINT_PTR nIDEvent)
 				}
 			}
 		}
-		m_WindowsList.ResetContent();
+
+		CString cur_text;
+		CString new_text;
+		m_WindowsEdit.GetWindowTextW(cur_text);
 		int key = m_KeyList.GetCurSel() + 100;
 		for (int i = 0; i < groups[key].windows.size(); i++) {
 			CString title;
 			groups[key].windows[i]->GetWindowTextW(title);
-			m_WindowsList.AddString(title);
+			new_text.Append(title + L"\r\n");
+		}
+		if (cur_text != new_text) {
+			m_WindowsEdit.SetWindowTextW(new_text);
 		}
 	}
 	CDialogEx::OnTimer(nIDEvent);
