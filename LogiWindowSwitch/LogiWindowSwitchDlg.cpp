@@ -12,6 +12,7 @@
 #define new DEBUG_NEW
 #endif
 
+#define CALLBACKMSG (WM_USER + 1)
 
 // CLogiWindowSwitchDlg 對話方塊
 
@@ -32,6 +33,7 @@ void CLogiWindowSwitchDlg::DoDataExchange(CDataExchange* pDX)
 BEGIN_MESSAGE_MAP(CLogiWindowSwitchDlg, CDialogEx)
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
+	ON_WM_TIMER()
 END_MESSAGE_MAP()
 
 
@@ -47,6 +49,9 @@ BOOL CLogiWindowSwitchDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// 設定小圖示
 
 	// TODO: 在此加入額外的初始設定
+	ctrl_is_down = false;
+	last_window = NULL;
+	SetTimer(0, 100, NULL);
 	if (!SetRawInput(m_hWnd)) {
 		AfxMessageBox(L"Fail to Rigister Raw Input");
 		exit(0);
@@ -95,44 +100,68 @@ VOID CLogiWindowSwitchDlg::HandleKeyInput(RAWKEYBOARD rawKB) {
 	auto scanCode = rawKB.MakeCode;
 	auto flags = rawKB.Flags;
 	auto message = rawKB.Message;
-	CString ss;
-	m_Edit1.GetWindowTextW(ss);
-	ss.Format(L"%sdown vkcode : %d, scancode : %d, flags : %d\r\n", ss, vkCode, scanCode, flags);
-	m_Edit1.SetWindowTextW(ss);
-	m_Edit1.SetSel(0xFFFF, 0xFFFF);
-	static CWnd *target[4];
-	static clock_t timer[4];
-	static bool start[4];
-
-	int id = scanCode - 100;
-	if (id < 0 || id >= 4)
-		return;
-
-	if (flags == 0) {
-		if (start[id] == false) {
-			start[id] = true;
-			timer[id] = clock();
-		}
+	if (scanCode == 29) {
+		ctrl_is_down = flags % 2 == 0;
+	}
+	if (scanCode < 100 || scanCode >= 112) {
 		return;
 	}
-	start[id] = false;
-	bool mode = (float(clock() - timer[id]) / CLOCKS_PER_SEC) >= 2;
-	if (mode) {
-		target[id] = GetForegroundWindow();
+
+	CString msg;
+	auto &window = windows[scanCode];
+	if (ctrl_is_down) {
+		if (flags % 2 == 0) {
+			window.target = GetForegroundWindow();
+			CString tmp;
+			window.target->GetWindowTextW(tmp);
+			msg.Format(L"Set G%d : %s\r\n", scanCode - 99, tmp);
+			PrintMessage(msg);
+		}
 	}
 	else {
-		if (target[id] == NULL || !IsWindow(target[id]->m_hWnd)) {
-			target[id] = NULL;
+		if (window.target == NULL || !IsWindow(window.target->m_hWnd)) {
+			window.target = NULL;
+		}
+		else if (flags % 2 == 0) {
+			if (window.counter == 0) {
+				if (GetForegroundWindow() == window.target) {
+					//window.target->SetWindowPos(&wndBottom, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOREDRAW | SWP_NOSENDCHANGING);
+					window.target->ShowWindow(SW_MINIMIZE);
+				}
+				else {
+					if (window.target->IsIconic()) {
+						auto fg = GetForegroundWindow();
+						window.target->ShowWindow(SW_RESTORE);
+						while (GetForegroundWindow() != fg) {
+							fg->SetForegroundWindow();
+						}
+					}
+					window.target->SetWindowPos(&wndTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+					window.counter = 1;
+				}
+				msg.Format(L"G%d down\r\n", scanCode - 99);
+				PrintMessage(msg);
+			}
+			else if (window.counter == 1) {
+				window.counter = 2;
+				msg.Format(L"G%d long\r\n", scanCode - 99);
+				PrintMessage(msg);
+			}
 		}
 		else {
-			if (target[id]->IsIconic()) {
-				target[id]->ShowWindow(SW_RESTORE);
+			window.target->SetWindowPos(&wndNoTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+			if (window.counter == 1) {
+				while (GetForegroundWindow() != window.target) {
+					window.target->SetForegroundWindow();
+				}
 			}
-			while (GetForegroundWindow() != target[id]) {
-				target[id]->SetActiveWindow();
-				target[id]->SetForegroundWindow();
-				target[id]->SetFocus();
+			else if (window.counter == 2) {
+				auto fg = GetForegroundWindow();
+				fg->SetWindowPos(&wndTop, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 			}
+			window.counter = 0;
+			msg.Format(L"G%d Up\r\n", scanCode - 99);
+			PrintMessage(msg);
 		}
 	}
 }
@@ -169,4 +198,34 @@ BOOL CLogiWindowSwitchDlg::PreTranslateMessage(MSG* pMsg)
 	if (pMsg->message == WM_INPUT)
 		RawInput(pMsg->hwnd, pMsg->message, pMsg->wParam, pMsg->lParam);
 	return CDialog::PreTranslateMessage(pMsg);
+}
+
+void CLogiWindowSwitchDlg::OnTimer(UINT_PTR nIDEvent)
+{
+	if (nIDEvent == 0) {
+		for (auto window : windows) {
+			if (window.second.target && !IsWindow(window.second.target->m_hWnd)) {
+				window.second.target = NULL;
+			}
+		}
+	}
+	CString status;
+	for (int i = 0; i < 9; i++) {
+		CWnd *target = windows[i + 100].target;
+		CString title;
+		if (target && IsWindow(target->m_hWnd)) {
+			target->GetWindowText(title);
+		}
+		status.AppendFormat(L"G%d : %s\n", i + 1, title);
+	}
+	GetDlgItem(IDC_STATIC)->SetWindowTextW(status);
+	CDialogEx::OnTimer(nIDEvent);
+}
+
+VOID CLogiWindowSwitchDlg::PrintMessage(CString msg) {
+	CString str;
+	m_Edit1.GetWindowTextW(str);
+	str.Append(msg);
+	m_Edit1.SetWindowTextW(str);
+	m_Edit1.SetSel(0xFFFFFFF, 0xFFFFFFF);
 }
