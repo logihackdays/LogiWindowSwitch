@@ -3,7 +3,7 @@
 //
 
 #pragma once
-
+#include <vector>
 
 // CLogiWindowSwitchDlg 對話方塊
 class CLogiWindowSwitchDlg : public CDialogEx
@@ -25,13 +25,14 @@ public:
 protected:
 	HICON m_hIcon;
 
-	struct Window {
-		CWnd *target;
+	struct Group {
+		std::vector<CWnd*> windows;
 		int counter;
 	};
-	std::map<int, Window> windows;
+	std::map<int, Group> groups;
 
 	bool ctrl_is_down;
+	bool shift_is_down;
 	CWnd *last_window;
 
 	// 產生的訊息對應函式
@@ -47,4 +48,6 @@ protected:
 	VOID PrintMessage(CString msg);
 public:
 	CEdit m_Edit1;
+	CListBox m_KeyList;
+	CListBox m_WindowsList;
 };

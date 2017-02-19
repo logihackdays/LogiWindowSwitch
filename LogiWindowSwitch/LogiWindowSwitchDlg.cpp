@@ -6,7 +6,6 @@
 #include "LogiWindowSwitch.h"
 #include "LogiWindowSwitchDlg.h"
 #include "afxdialogex.h"
-#include "LogitechGkeyLib.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -28,6 +27,8 @@ void CLogiWindowSwitchDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
 	DDX_Control(pDX, IDC_EDIT1, m_Edit1);
+	DDX_Control(pDX, IDC_KEYLIST, m_KeyList);
+	DDX_Control(pDX, IDC_WINDOWSLIST, m_WindowsList);
 }
 
 BEGIN_MESSAGE_MAP(CLogiWindowSwitchDlg, CDialogEx)
@@ -50,12 +51,20 @@ BOOL CLogiWindowSwitchDlg::OnInitDialog()
 
 	// TODO: 在此加入額外的初始設定
 	ctrl_is_down = false;
+	shift_is_down = false;
 	last_window = NULL;
+	for (int i = 0; i < 9; i++) {
+		CString kn;
+		kn.Format(L"G%d", i + 1);
+		m_KeyList.AddString(kn);
+	}
+	m_KeyList.SetCurSel(0);
 	SetTimer(0, 100, NULL);
 	if (!SetRawInput(m_hWnd)) {
 		AfxMessageBox(L"Fail to Rigister Raw Input");
 		exit(0);
 	}
+
 	return TRUE;  // 傳回 TRUE，除非您對控制項設定焦點
 }
 
@@ -100,66 +109,74 @@ VOID CLogiWindowSwitchDlg::HandleKeyInput(RAWKEYBOARD rawKB) {
 	auto scanCode = rawKB.MakeCode;
 	auto flags = rawKB.Flags;
 	auto message = rawKB.Message;
+	bool down = flags % 2 == 0;
+	
 	if (scanCode == 29) {
-		ctrl_is_down = flags % 2 == 0;
+		ctrl_is_down = down;
 	}
+	if (scanCode == 42 || scanCode == 54) {
+		shift_is_down = down;
+	}
+	
 	if (scanCode < 100 || scanCode >= 112) {
 		return;
 	}
 
 	CString msg;
-	auto &window = windows[scanCode];
-	if (ctrl_is_down) {
-		if (flags % 2 == 0) {
-			window.target = GetForegroundWindow();
+	auto &group = groups[scanCode];
+	auto &windows = group.windows;
+	if (ctrl_is_down || shift_is_down) {
+		if (down) {
+			if (ctrl_is_down) {
+				windows.clear();
+			}
+			auto w = GetForegroundWindow();
+			if (std::find(windows.begin(), windows.end(), w) == windows.end()) {
+				windows.push_back(w);
+			}
 			CString tmp;
-			window.target->GetWindowTextW(tmp);
+			w->GetWindowTextW(tmp);
 			msg.Format(L"Set G%d : %s\r\n", scanCode - 99, tmp);
 			PrintMessage(msg);
 		}
 	}
 	else {
-		if (window.target == NULL || !IsWindow(window.target->m_hWnd)) {
-			window.target = NULL;
-		}
-		else if (flags % 2 == 0) {
-			if (window.counter == 0) {
-				if (GetForegroundWindow() == window.target) {
-					//window.target->SetWindowPos(&wndBottom, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOREDRAW | SWP_NOSENDCHANGING);
-					window.target->ShowWindow(SW_MINIMIZE);
-				}
-				else {
-					if (window.target->IsIconic()) {
+		if (down) {
+			if (group.counter == 0) {
+				for (auto w : windows) {
+					if (w->IsIconic()) {
 						auto fg = GetForegroundWindow();
-						window.target->ShowWindow(SW_RESTORE);
+						w->ShowWindow(SW_RESTORE);
 						while (GetForegroundWindow() != fg) {
 							fg->SetForegroundWindow();
 						}
 					}
-					window.target->SetWindowPos(&wndTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-					window.counter = 1;
+					w->SetWindowPos(&wndTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 				}
+				group.counter = 1;
 				msg.Format(L"G%d down\r\n", scanCode - 99);
 				PrintMessage(msg);
 			}
-			else if (window.counter == 1) {
-				window.counter = 2;
+			else if (group.counter == 1) {
+				group.counter = 2;
 				msg.Format(L"G%d long\r\n", scanCode - 99);
 				PrintMessage(msg);
 			}
 		}
 		else {
-			window.target->SetWindowPos(&wndNoTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-			if (window.counter == 1) {
-				while (GetForegroundWindow() != window.target) {
-					window.target->SetForegroundWindow();
+			for (auto w : windows) {
+				w->SetWindowPos(&wndNoTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+				if (group.counter == 1) {
+					while (GetForegroundWindow() != w) {
+						w->SetForegroundWindow();
+					}
+				}
+				else if (group.counter == 2) {
+					auto fg = GetForegroundWindow();
+					fg->SetWindowPos(&wndTop, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 				}
 			}
-			else if (window.counter == 2) {
-				auto fg = GetForegroundWindow();
-				fg->SetWindowPos(&wndTop, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-			}
-			window.counter = 0;
+			group.counter = 0;
 			msg.Format(L"G%d Up\r\n", scanCode - 99);
 			PrintMessage(msg);
 		}
@@ -203,22 +220,23 @@ BOOL CLogiWindowSwitchDlg::PreTranslateMessage(MSG* pMsg)
 void CLogiWindowSwitchDlg::OnTimer(UINT_PTR nIDEvent)
 {
 	if (nIDEvent == 0) {
-		for (auto window : windows) {
-			if (window.second.target && !IsWindow(window.second.target->m_hWnd)) {
-				window.second.target = NULL;
+		for (auto &gp : groups) {
+			auto &windows = gp.second.windows;
+			for (int i = 0; i < windows.size(); i++) {
+				if (!IsWindow(windows[i]->m_hWnd)) {
+					windows.erase(windows.begin() + i);
+					i--;
+				}
 			}
 		}
-	}
-	CString status;
-	for (int i = 0; i < 9; i++) {
-		CWnd *target = windows[i + 100].target;
-		CString title;
-		if (target && IsWindow(target->m_hWnd)) {
-			target->GetWindowText(title);
+		m_WindowsList.ResetContent();
+		int key = m_KeyList.GetCurSel() + 100;
+		for (int i = 0; i < groups[key].windows.size(); i++) {
+			CString title;
+			groups[key].windows[i]->GetWindowTextW(title);
+			m_WindowsList.AddString(title);
 		}
-		status.AppendFormat(L"G%d : %s\n", i + 1, title);
 	}
-	GetDlgItem(IDC_STATIC)->SetWindowTextW(status);
 	CDialogEx::OnTimer(nIDEvent);
 }
 
