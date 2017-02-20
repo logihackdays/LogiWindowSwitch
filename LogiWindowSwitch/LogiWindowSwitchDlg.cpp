@@ -129,16 +129,20 @@ VOID CLogiWindowSwitchDlg::HandleKeyInput(RAWKEYBOARD rawKB) {
 		if (down) {
 			if (ctrl_is_down) {
 				windows.clear();
-			}
-			auto w = GetForegroundWindow();
-			if (IsAccepedWindow(w)) {
-				if (std::find(windows.begin(), windows.end(), w) == windows.end()) {
-					windows.push_back(w);
-				}
-				CString tmp;
-				w->GetWindowTextW(tmp);
-				msg.Format(L"Set G%d : %s\r\n", scanCode - 99, tmp);
+				msg.Format(L"Clear G%d\r\n", scanCode - 99);
 				PrintMessage(msg);
+			}
+			if (shift_is_down) {
+				auto w = GetForegroundWindow();
+				if (IsAccepedWindow(w)) {
+					if (std::find(windows.begin(), windows.end(), w) == windows.end()) {
+						windows.push_back(w);
+					}
+					CString tmp;
+					w->GetWindowTextW(tmp);
+					msg.Format(L"Push  G%d : %s\r\n", scanCode - 99, tmp);
+					PrintMessage(msg);
+				}
 			}
 		}
 	}
@@ -303,4 +307,3 @@ BOOL CLogiWindowSwitchDlg::IsAccepedWindow(CWnd* window) {
 	BOOL rv = window && IsWindow(window->m_hWnd) && window->GetWindowTextLengthW() > 0;
 	return rv;
 }
-
