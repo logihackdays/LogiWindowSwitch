@@ -27,13 +27,14 @@ protected:
 
 	struct Group {
 		std::vector<CWnd*> windows;
-		int counter;
+		int counter = 0;
 	};
 	std::map<int, Group> groups;
 
 	bool ctrl_is_down;
 	bool shift_is_down;
-	CWnd *last_window;
+	int foreground_group;
+	std::vector<CWnd*> foreground_group_windows;
 
 	// 產生的訊息對應函式
 	virtual BOOL OnInitDialog();
@@ -46,6 +47,7 @@ protected:
 	BOOL PreTranslateMessage(MSG* pMsg);
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	VOID PrintMessage(CString msg);
+	BOOL IsAccepedWindow(CWnd* window);
 public:
 	CEdit m_Edit1;
 	CListBox m_KeyList;

@@ -52,14 +52,14 @@ BOOL CLogiWindowSwitchDlg::OnInitDialog()
 	// TODO: 在此加入額外的初始設定
 	ctrl_is_down = false;
 	shift_is_down = false;
-	last_window = NULL;
+	foreground_group = -1;
 	for (int i = 0; i < 9; i++) {
 		CString kn;
 		kn.Format(L"G%d", i + 1);
 		m_KeyList.AddString(kn);
 	}
 	m_KeyList.SetCurSel(0);
-	SetTimer(0, 100, NULL);
+	SetTimer(0, 50, NULL);
 	if (!SetRawInput(m_hWnd)) {
 		AfxMessageBox(L"Fail to Rigister Raw Input");
 		exit(0);
@@ -131,33 +131,41 @@ VOID CLogiWindowSwitchDlg::HandleKeyInput(RAWKEYBOARD rawKB) {
 				windows.clear();
 			}
 			auto w = GetForegroundWindow();
-			if (std::find(windows.begin(), windows.end(), w) == windows.end()) {
-				windows.push_back(w);
+			if (IsAccepedWindow(w)) {
+				if (std::find(windows.begin(), windows.end(), w) == windows.end()) {
+					windows.push_back(w);
+				}
+				CString tmp;
+				w->GetWindowTextW(tmp);
+				msg.Format(L"Set G%d : %s\r\n", scanCode - 99, tmp);
+				PrintMessage(msg);
 			}
-			CString tmp;
-			w->GetWindowTextW(tmp);
-			msg.Format(L"Set G%d : %s\r\n", scanCode - 99, tmp);
-			PrintMessage(msg);
 		}
 	}
 	else {
 		if (down) {
 			if (group.counter == 0) {
-				for (int i = windows.size() - 1; i >= 0; i--) {
-					auto w = windows[i];
-					if (!IsWindow(w->m_hWnd)) {
-						continue;
+				if (foreground_group == scanCode) {
+					for (auto w : foreground_group_windows) {
+						w->ShowWindow(SW_MINIMIZE);
 					}
-					if (w->IsIconic()) {
-						auto fg = GetForegroundWindow();
-						w->ShowWindow(SW_RESTORE);
-						while (GetForegroundWindow() != fg) {
-							fg->SetForegroundWindow();
-						}
-					}
-					w->SetWindowPos(&wndTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+					foreground_group = -1;
+					group.counter = 3;
 				}
-				group.counter = 1;
+				else {
+					for (int i = windows.size() - 1; i >= 0; i--) {
+						auto w = windows[i];
+						if (w->IsIconic()) {
+							auto fw = GetForegroundWindow();
+							w->ShowWindow(SW_SHOWNOACTIVATE);
+							while (fw && GetForegroundWindow() != fw) {
+								fw->SetForegroundWindow();
+							}
+						}
+						w->SetWindowPos(&wndTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+					}
+					group.counter = 1;
+				}
 				msg.Format(L"G%d down\r\n", scanCode - 99);
 				PrintMessage(msg);
 			}
@@ -168,20 +176,33 @@ VOID CLogiWindowSwitchDlg::HandleKeyInput(RAWKEYBOARD rawKB) {
 			}
 		}
 		else {
-			for (int i = windows.size() - 1; i >= 0; i--) {
-				auto w = windows[i];
-				if (!IsWindow(w->m_hWnd)) {
-					continue;
-				}
+			for (auto w : windows) {
 				w->SetWindowPos(&wndNoTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-				if (group.counter == 1) {
+			}
+			if (group.counter == 1) {
+				foreground_group_windows.clear();
+				for (int i = windows.size() - 1; i >= 0; i--) {
+					auto w = windows[i];
 					while (GetForegroundWindow() != w) {
 						w->SetForegroundWindow();
 					}
+					foreground_group_windows.push_back(w);
 				}
-				else if (group.counter == 2) {
-					auto fg = GetForegroundWindow();
-					fg->SetWindowPos(&wndTop, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+				foreground_group = scanCode;
+			}
+			else if (group.counter == 2) {
+				if (foreground_group != -1) {
+					auto &fgw = foreground_group_windows;
+					for (auto w : fgw) {
+						w->SetWindowPos(&wndTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+						w->SetWindowPos(&wndNoTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+					}
+				}
+				else {
+					auto fw = GetForegroundWindow();
+					if (IsAccepedWindow(fw)) {
+						fw->SetWindowPos(&wndTop, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+					}
 				}
 			}
 			group.counter = 0;
@@ -237,6 +258,20 @@ void CLogiWindowSwitchDlg::OnTimer(UINT_PTR nIDEvent)
 				}
 			}
 		}
+		
+		auto fw = GetForegroundWindow();
+		if (IsAccepedWindow(fw) && foreground_group != -1 && !foreground_group_windows.empty()) {
+			auto &fgw = foreground_group_windows;
+			for (int i = 0; i < fgw.size() - 1; i++) {
+				if (fgw[i] == fw) {
+					std::swap(fgw[i], fgw[i + 1]);
+				}
+			}
+			if (fgw.back() != fw) {
+				foreground_group = -1;
+			}
+		}
+		
 
 		CString cur_text;
 		CString new_text;
@@ -260,4 +295,9 @@ VOID CLogiWindowSwitchDlg::PrintMessage(CString msg) {
 	str.Append(msg);
 	m_Edit1.SetWindowTextW(str);
 	m_Edit1.SetSel(0xFFFFFFF, 0xFFFFFFF);
+}
+
+BOOL CLogiWindowSwitchDlg::IsAccepedWindow(CWnd* window) {
+	BOOL rv = window && IsWindow(window->m_hWnd) && window->GetWindowTextLengthW() > 0;
+	return rv;
 }
