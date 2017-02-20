@@ -166,13 +166,9 @@ VOID CLogiWindowSwitchDlg::HandleKeyInput(RAWKEYBOARD rawKB) {
 						w->SetWindowPos(&wndTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 					}
 					group.counter = 1;
+					group.timer = GetTickCount64();
 				}
 				msg.Format(L"G%d down\r\n", scanCode - 99);
-				PrintMessage(msg);
-			}
-			else if (group.counter == 1) {
-				group.counter = 2;
-				msg.Format(L"G%d long\r\n", scanCode - 99);
 				PrintMessage(msg);
 			}
 		}
@@ -182,33 +178,37 @@ VOID CLogiWindowSwitchDlg::HandleKeyInput(RAWKEYBOARD rawKB) {
 				w->SetWindowPos(&wndNoTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 			}
 			if (group.counter == 1) {
-				foreground_group_windows.clear();
-				for (int i = windows.size() - 1; i >= 0; i--) {
-					auto w = windows[i];
-					while (GetForegroundWindow() != w) {
-						w->SetForegroundWindow();
+				if (GetTickCount64() - group.timer < 500) {
+					foreground_group_windows.clear();
+					for (int i = windows.size() - 1; i >= 0; i--) {
+						auto w = windows[i];
+						while (GetForegroundWindow() != w) {
+							w->SetForegroundWindow();
+						}
+						foreground_group_windows.push_back(w);
 					}
-					foreground_group_windows.push_back(w);
-				}
-				foreground_group = scanCode;
-			}
-			else if (group.counter == 2) {
-				if (foreground_group != -1) {
-					auto &fgw = foreground_group_windows;
-					for (auto w : fgw) {
-						w->SetWindowPos(&wndTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-						w->SetWindowPos(&wndNoTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-					}
+					foreground_group = scanCode;
+					msg.Format(L"G%d Up\r\n", scanCode - 99);
 				}
 				else {
-					auto fw = GetForegroundWindow();
-					if (IsAccepedWindow(fw)) {
-						fw->SetWindowPos(&wndTop, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+					if (foreground_group != -1) {
+						auto &fgw = foreground_group_windows;
+						for (auto w : fgw) {
+							w->SetWindowPos(&wndTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+							w->SetWindowPos(&wndNoTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+						}
 					}
+					else {
+						auto fw = GetForegroundWindow();
+						if (IsAccepedWindow(fw)) {
+							fw->SetWindowPos(&wndTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+							fw->SetWindowPos(&wndNoTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+						}
+					}
+					msg.Format(L"G%d Long Up\r\n", scanCode - 99);
 				}
 			}
 			group.counter = 0;
-			msg.Format(L"G%d Up\r\n", scanCode - 99);
 			PrintMessage(msg);
 		}
 	}
@@ -271,9 +271,9 @@ void CLogiWindowSwitchDlg::OnTimer(UINT_PTR nIDEvent)
 			}
 			if (fgw.back() != fw) {
 				foreground_group = -1;
+				foreground_group_windows.resize(1);
 			}
 		}
-		
 
 		CString cur_text;
 		CString new_text;

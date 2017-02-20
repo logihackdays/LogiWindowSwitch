@@ -28,6 +28,7 @@ protected:
 	struct Group {
 		std::vector<CWnd*> windows;
 		int counter = 0;
+		ULONGLONG timer = 0;
 	};
 	std::map<int, Group> groups;
 
