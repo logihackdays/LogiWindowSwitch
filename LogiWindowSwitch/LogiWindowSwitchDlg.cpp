@@ -162,6 +162,7 @@ VOID CLogiWindowSwitchDlg::HandleKeyInput(RAWKEYBOARD rawKB) {
 								fw->SetForegroundWindow();
 							}
 						}
+						w->SetWindowPos(&wndTop, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 						w->SetWindowPos(&wndTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 					}
 					group.counter = 1;
@@ -176,7 +177,8 @@ VOID CLogiWindowSwitchDlg::HandleKeyInput(RAWKEYBOARD rawKB) {
 			}
 		}
 		else {
-			for (auto w : windows) {
+			for (int i = windows.size() - 1; i >= 0; i--) {
+				auto w = windows[i];
 				w->SetWindowPos(&wndNoTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 			}
 			if (group.counter == 1) {
@@ -301,3 +303,4 @@ BOOL CLogiWindowSwitchDlg::IsAccepedWindow(CWnd* window) {
 	BOOL rv = window && IsWindow(window->m_hWnd) && window->GetWindowTextLengthW() > 0;
 	return rv;
 }
+
